@@ -1,18 +1,24 @@
-from collections import deque
-from datetime import date
+from collections import defaultdict, deque
+from models import BloodUnit
 
-# Hash Map: blood_group -> Queue
-blood_map = {}
+blood_map = defaultdict(deque)
 
 def add_blood_unit(unit):
-    if unit.blood_group not in blood_map:
-        blood_map[unit.blood_group] = deque()
     blood_map[unit.blood_group].append(unit)
 
-def use_blood(blood_group):
-    if blood_group in blood_map and blood_map[blood_group]:
-        return blood_map[blood_group].popleft()  # FIFO
+def use_blood(group):
+    if blood_map[group]:
+        return blood_map[group].popleft()
     return None
 
-def sort_by_expiry(units):
-    return sorted(units, key=lambda x: x.expiry_date)
+def load_inventory(db):
+    units = db.query(BloodUnit).filter(BloodUnit.status == "AVAILABLE").all()
+    for u in sorted(units, key=lambda x: x.expiry_date):
+        blood_map[u.blood_group].append(u)
+
+def emergency_match(group, units_needed):
+    matched = []
+    for _ in range(units_needed):
+        if blood_map[group]:
+            matched.append(blood_map[group].popleft())
+    return matched
