@@ -13,9 +13,12 @@ def get_db():
     try: yield db
     finally: db.close()
 
+# File: C:\Users\hp\Desktop\blood-bank\backend\routers\auth.py
+
 @router.post("/register")
 def register(data: RegisterSchema, db: Session = Depends(get_db)):
-    return create_user(db, data.email, data.password)
+    # Update this line to pass data.role 
+    return create_user(db, data.email, data.password, role=data.role)
 
 @router.post("/login")
 def login(data: LoginSchema, db: Session = Depends(get_db)):

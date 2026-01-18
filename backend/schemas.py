@@ -8,6 +8,7 @@ class LoginSchema(BaseModel):
     password: str
 
 class RegisterSchema(LoginSchema):
+    role: str = "USER"  # Add this line to accept the role from the frontend
     pass
 
 
