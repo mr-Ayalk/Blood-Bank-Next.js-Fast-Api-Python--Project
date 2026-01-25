@@ -1,84 +1,97 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import BloodUnit, UserProfile
+from datetime import datetime
+import models 
+from models import BloodUnit, UserProfile, User, DonationRequest, ReceiveRequest
+
 from schemas import BloodCreate
 from crud import add_blood
-from dsa_logic import add_blood_unit
 
+from dsa_logic import add_blood_unit, blood_inventory 
 from security import require_admin
 
-router = APIRouter(
-    prefix="/admin",
-    tags=["Admin"],
-    dependencies=[Depends(require_admin)]
-)
+router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
 
-# Dependency to get the database session
 def get_db():
     db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    try: yield db
+    finally: db.close()
 
-# --- Dashboard Statistics ---
+# 1. Overview Page Stats (Calculates from the Hash Map)
 @router.get("/dashboard/stats")
 def dashboard_stats(db: Session = Depends(get_db)):
+    now = datetime.now()
+    
+    # 1. Total count
     total = db.query(BloodUnit).count()
-    available = db.query(BloodUnit).filter(BloodUnit.status == "AVAILABLE").count()
-    expired = db.query(BloodUnit).filter(BloodUnit.status == "EXPIRED").count()
-
-    # Calculate stock grouped by blood group
-    grouped = {}
-    units = db.query(BloodUnit).filter(BloodUnit.status == "AVAILABLE").all()
-    for u in units:
-        grouped[u.blood_group] = grouped.get(u.blood_group, 0) + u.quantity
+    
+    # 2. Count "Available" but NOT expired
+    available = db.query(BloodUnit).filter(
+        BloodUnit.status == "AVAILABLE",
+        BloodUnit.expiry_date > now
+    ).count()
+    
+    # 3. Count units where date has passed OR status is already EXPIRED
+    expired = db.query(BloodUnit).filter(
+        (BloodUnit.expiry_date <= now) | (BloodUnit.status == "EXPIRED")
+    ).count()
+    
+    # 4. Dispatched units
+    dispatched = db.query(BloodUnit).filter(BloodUnit.status == "DISPATCHED").count()
+    
+    # 5. Stock by group (only counting safe/available units)
+    # This matches the "SAFE" count on your records page
+    grouped_stock = {}
+    for bg in ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"]:
+        count = db.query(BloodUnit).filter(
+            BloodUnit.blood_group == bg,
+            BloodUnit.status == "AVAILABLE",
+            BloodUnit.expiry_date > now
+        ).count()
+        grouped_stock[bg] = count
 
     return {
         "total_units": total,
         "available_units": available,
         "expired_units": expired,
-        "stock_by_group": grouped
+        "dispatched_units": dispatched,
+        "stock_by_group": grouped_stock
     }
-
-# --- Blood Records CRUD ---
+# 2. Add Unit Button logic.
 @router.post("/blood")
 def add_blood_record(blood: BloodCreate, db: Session = Depends(get_db)):
     unit = add_blood(db, blood)
-    add_blood_unit(unit)  # Triggering DSA logic (e.g., updating a priority queue or tree)
+    add_blood_unit(unit) # Updates the Min-Heap
     return unit
 
-@router.put("/blood/{blood_id}")
-def update_blood(blood_id: int, blood: BloodCreate, db: Session = Depends(get_db)):
-    unit = db.query(BloodUnit).filter(BloodUnit.id == blood_id).first()
-    if not unit:
-        raise HTTPException(status_code=404, detail="Blood unit not found")
+@router.get("/blood")
+def get_all_blood(db: Session = Depends(get_db)):
+    # Sorting: Earliest expiry date first for frontend display
+    return db.query(BloodUnit).filter(BloodUnit.status == "AVAILABLE").order_by(BloodUnit.expiry_date.asc()).all()
 
-    unit.blood_group = blood.blood_group
-    unit.quantity = blood.quantity
-    unit.expiry_date = blood.expiry_date
-
-    db.commit()
-    db.refresh(unit)
-    return unit
-
-@router.delete("/blood/{blood_id}")
-def delete_blood(blood_id: int, db: Session = Depends(get_db)):
-    unit = db.query(BloodUnit).filter(BloodUnit.id == blood_id).first()
-    if not unit:
-        raise HTTPException(status_code=404, detail="Blood unit not found")
-
-    db.delete(unit)
-    db.commit()
-    return {"message": "Deleted successfully"}
-
-# --- User Management ---
+# 4. Donors Queue (FIFO logic)
 @router.get("/donors")
-def get_donors(db: Session = Depends(get_db)):
-    # Assuming UserProfile has a role or type attribute to distinguish donors
-    return db.query(UserProfile).all()
+def get_ordered_donors(db: Session = Depends(get_db)):
+    return db.query(DonationRequest).filter(DonationRequest.status == "PENDING").order_by(DonationRequest.id.asc()).all()
 
-@router.get("/receivers")
-def get_receivers(db: Session = Depends(get_db)):
-    return db.query(UserProfile).all()
+
+# Now we use UserProfile and DonationRequest to remove the "not accessed" warning
+@router.get("/donors/requests")
+def get_donor_requests(db: Session = Depends(get_db)):
+    # Joining DonationRequest with UserProfile to get the donor's name
+    results = db.query(DonationRequest, UserProfile).join(
+        UserProfile, DonationRequest.user_id == UserProfile.user_id
+    ).filter(DonationRequest.status == "PENDING").all()
+
+    # Formating the output for the frontend
+    return [
+        {
+            "request_id": req.id,
+            "donor_name": profile.full_name,
+            "blood_group": req.blood_group,
+            "units": req.units,
+            "status": req.status
+        }
+        for req, profile in results
+    ]

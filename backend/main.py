@@ -1,74 +1,32 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session # Make sure this is imported for the type hint
-from sqladmin import Admin, ModelView 
-from database import SessionLocal, engine
-import models, crud, schemas
-
-# # 1. Create tables in the database
-# models.Base.metadata.create_all(bind=engine)
-
-# app = FastAPI()
-
-# # 2. CORS Configuration
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["http://localhost:3000"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# # 3. Setup Admin Dashboard
-# admin = Admin(app, engine)
-
-# # 4. Register the Model with Admin
-# class BloodAdmin(ModelView, model=models.BloodUnit):
-#     column_list = [models.BloodUnit.id, models.BloodUnit.blood_group, models.BloodUnit.quantity, models.BloodUnit.expiry_date]
-#     form_columns = [models.BloodUnit.blood_group, models.BloodUnit.quantity, models.BloodUnit.expiry_date]
-#     icon = "fa-solid fa-droplet"
-#     name = "Blood Unit"
-
-# admin.add_view(BloodAdmin)
-
-# # 5. Dependency
-# def get_db():
-#     db = SessionLocal()
-#     try:
-#         yield db
-#     finally:
-#         db.close()
-
-# # 6. API Routes
-# @app.post("/blood", response_model=schemas.BloodResponse)
-# def add_blood(blood: schemas.BloodCreate, db: Session = Depends(get_db)):
-#     return crud.create_blood(db, blood)
-
-# @app.get("/blood")
-# def get_blood(db: Session = Depends(get_db)):
-#     return crud.get_all_blood(db)
-
-# @app.get("/")
-# def read_root():
-#     return {"message": "Welcome to the Blood Bank API"}from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from database import engine
+from database import engine, SessionLocal
 import models
 from dsa_logic import load_inventory
 from routers import auth, users, blood, admin, requests
 
+# Initialize Database Tables
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="Blood Bank Management System",
+    description="A DSA-driven system using Min-Heaps for Emergency Matching",
+    version="1.0.0"
+)
 
+# Configure CORS for Frontend Communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Include API Routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(blood.router)
@@ -77,10 +35,28 @@ app.include_router(requests.router)
 
 @app.get("/")
 def root():
-    return {"message": "Blood Bank API running"}
+    return {
+        "status": "online",
+        "message": "Blood Bank API is running",
+        "dsa_features": ["Min-Heap Expiry Tracking", "Hash Map Indexing", "Compatibility Logic"]
+    }
+
+# --- CRITICAL STARTUP LOGIC ---
 @app.on_event("startup")
 def startup_event():
-    from database import SessionLocal
-    db = SessionLocal()
-    load_inventory(db)
-    db.close()
+    """
+    This runs when the server starts.
+    It hydrates the in-memory Min-Heap from the SQL database.
+    """
+    print("Initializing DSA Inventory...")
+    # No 'db' argument passed here because load_inventory() 
+    # handles its own SessionLocal() internally now.
+    load_inventory()
+    print("System Ready.")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+

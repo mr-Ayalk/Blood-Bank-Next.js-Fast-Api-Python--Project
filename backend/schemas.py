@@ -1,6 +1,9 @@
+
 from pydantic import BaseModel
 from datetime import date
-
+from typing import Optional
+from pydantic import BaseModel
+from datetime import date
 # ---------- AUTH ----------
 
 class LoginSchema(BaseModel):
@@ -8,8 +11,14 @@ class LoginSchema(BaseModel):
     password: str
 
 class RegisterSchema(LoginSchema):
-    role: str = "USER"  # Add this line to accept the role from the frontend
-    pass
+    role: str = "USER" 
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
 
 
 # ---------- PROFILE ----------
@@ -23,13 +32,32 @@ class ProfileCreate(BaseModel):
     gender: str
     health_status: str
 
+    class Config:
+        from_attributes = True
+
 
 # ---------- BLOOD ----------
+
+# class BloodCreate(BaseModel):
+#     blood_group: str
+#     quantity: int
+#     expiry_date: date
 
 class BloodCreate(BaseModel):
     blood_group: str
     quantity: int
-    expiry_date: date
+    expiry_date: date  # Backend expects YYYY-MM-DD
 
+    class Config:
+        from_attributes = True
 class BloodResponse(BloodCreate):
     id: int
+
+
+# ---------- REQUESTS (The Missing Part) ----------
+
+class RequestCreate(BaseModel):
+    blood_group: str
+    quantity: int
+    
+    

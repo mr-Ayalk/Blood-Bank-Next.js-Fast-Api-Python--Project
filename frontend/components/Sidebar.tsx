@@ -11,6 +11,7 @@ import {
   UserCircle,
   HeartHandshake,
   LogOut,
+  AlertCircle,
 } from "lucide-react";
 
 export default function Sidebar({ type }: { type: "user" | "admin" }) {
@@ -24,6 +25,11 @@ export default function Sidebar({ type }: { type: "user" | "admin" }) {
       href: "/dashboard/admin/requests",
       icon: ClipboardList,
     },
+    {
+      name: "Emergency",
+      icon: AlertCircle,
+      href: "/dashboard/user/emergency",
+    },
     { name: "Donors", href: "/dashboard/admin/donors", icon: Users },
   ];
 
@@ -35,10 +41,15 @@ export default function Sidebar({ type }: { type: "user" | "admin" }) {
       href: "/dashboard/user/request-donate",
       icon: HeartHandshake,
     },
+    // {
+    //   name: "Receive Blood",
+    //   href: "/dashboard/user/request-receive",
+    //   icon: Droplet,
+    // },
     {
-      name: "Receive Blood",
-      href: "/dashboard/user/request-receive",
-      icon: Droplet,
+      name: "Emergency",
+      icon: AlertCircle,
+      href: "/dashboard/user/emergency",
     },
   ];
 
